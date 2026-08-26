@@ -8,6 +8,7 @@ import {
   Building2,
   ChevronLeft,
   ChevronRight,
+  Coins,
   FileText,
   FolderKanban,
   Heart,
@@ -35,6 +36,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
   { href: "/banks", labelKey: "banks", icon: Wallet },
+  { href: "/currencies", labelKey: "currencies", icon: Coins },
   { href: "/branches", labelKey: "branches", icon: Building2 },
   { href: "/roles", labelKey: "roles", icon: Shield },
   { href: "/users", labelKey: "users", icon: Users },
@@ -147,7 +149,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="p-4 border-t border-border">
           <div className="rounded-xl bg-background/50 p-3 text-center">
             <p className="text-xs text-muted">v1.0.0</p>
-            <p className="text-[10px] text-muted/60 mt-0.5">Kush-System © 2025</p>
+            <p className="text-[10px] text-muted/60 mt-0.5">NAS ERP © 2025</p>
           </div>
         </div>
       </aside>

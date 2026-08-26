@@ -17,7 +17,7 @@ const tajawal = Tajawal({
 });
 
 export const metadata: Metadata = {
-  title: "Kush-System | Non-Profit Organization Management",
+  title: "NAS ERP | Non-Profit Organization Management",
   description:
     "Production-ready non-profit organization management system with bilingual support",
 };
@@ -34,7 +34,10 @@ export default function RootLayout({
       className={`${inter.variable} ${tajawal.variable} h-full antialiased dark`}
       suppressHydrationWarning
     >
-      <body className="min-h-full bg-background text-foreground">
+      <body
+        className="min-h-full bg-background text-foreground"
+        suppressHydrationWarning
+      >
         <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>

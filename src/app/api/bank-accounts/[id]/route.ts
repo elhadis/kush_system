@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, enrichProject } from "@/lib/mock-db/store";
+import { db } from "@/lib/mock-db/store";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -7,22 +7,22 @@ interface RouteParams {
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const project = db.projects.getById(id);
-  if (!project) {
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  const bank = db.banks.getById(id);
+  if (!bank) {
+    return NextResponse.json({ error: "Bank account not found" }, { status: 404 });
   }
-  return NextResponse.json(enrichProject(project));
+  return NextResponse.json(bank);
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   try {
     const body = await request.json();
-    const updated = db.projects.update(id, body);
+    const updated = db.banks.update(id, body);
     if (!updated) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      return NextResponse.json({ error: "Bank account not found" }, { status: 404 });
     }
-    return NextResponse.json(enrichProject(updated));
+    return NextResponse.json(updated);
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
@@ -30,9 +30,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
-  const deleted = db.projects.delete(id);
+  const deleted = db.banks.delete(id);
   if (!deleted) {
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    return NextResponse.json({ error: "Bank account not found" }, { status: 404 });
   }
   return NextResponse.json({ success: true });
 }

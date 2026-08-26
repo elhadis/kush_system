@@ -2,6 +2,7 @@
 
 import LanguageSwitcher from "@/components/ui/LanguageSwitcher";
 import { useTranslation } from "@/lib/i18n/LanguageProvider";
+import { useSession } from "@/lib/session/SessionProvider";
 import { cn } from "@/lib/utils";
 import { Bell, ChevronDown, LogOut, Menu, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -12,6 +13,15 @@ interface NavbarProps {
 
 export default function Navbar({ onMenuClick }: NavbarProps) {
   const { t } = useTranslation();
+  const {
+    currentUser,
+    currentRole,
+    users,
+    setCurrentUserId,
+    branchFilter,
+    isSuperAdmin,
+    logout,
+  } = useSession();
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifications] = useState(3);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -44,6 +54,11 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
             <h2 className="text-lg sm:text-xl font-bold gradient-brand-text truncate">
               {t("appName")}
             </h2>
+            {!isSuperAdmin && branchFilter && (
+              <p className="text-[10px] text-muted truncate">
+                {t("branchScopedView")}
+              </p>
+            )}
           </div>
         </div>
 
@@ -71,7 +86,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
                 <User className="w-4 h-4 text-white" />
               </div>
               <span className="hidden sm:block text-sm font-medium text-foreground">
-                Ahmed Hassan
+                {currentUser?.name ?? "..."}
               </span>
               <ChevronDown
                 className={cn(
@@ -82,12 +97,43 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
             </button>
 
             {profileOpen && (
-              <div className="absolute end-0 mt-2 w-48 rounded-xl bg-surface border border-border shadow-2xl py-1 animate-fade-in z-50">
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-surface-hover transition-colors">
-                  <User className="w-4 h-4 text-muted" />
-                  {t("profile")}
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-surface-hover transition-colors">
+              <div className="absolute end-0 mt-2 w-56 rounded-xl bg-surface border border-border shadow-2xl py-1 animate-fade-in z-50">
+                <div className="px-4 py-2 border-b border-border">
+                  <p className="text-sm font-medium text-foreground">
+                    {currentUser?.name}
+                  </p>
+                  <p className="text-xs text-muted">{currentRole?.name}</p>
+                </div>
+                <p className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted">
+                  {t("switchUser")}
+                </p>
+                {users.map((user) => (
+                  <button
+                    key={user.id}
+                    onClick={() => {
+                      setCurrentUserId(user.id);
+                      setProfileOpen(false);
+                      window.location.reload();
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-start",
+                      currentUser?.id === user.id
+                        ? "text-primary font-medium"
+                        : "text-foreground"
+                    )}
+                  >
+                    <User className="w-4 h-4 text-muted shrink-0" />
+                    <span className="truncate">{user.name}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    void logout();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-surface-hover transition-colors border-t border-border mt-1"
+                >
                   <LogOut className="w-4 h-4" />
                   {t("logout")}
                 </button>

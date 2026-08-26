@@ -10,51 +10,72 @@ import Modal, {
 } from "@/components/ui/Modal";
 import PageHeader from "@/components/ui/PageHeader";
 import { useTranslation } from "@/lib/i18n/LanguageProvider";
+import { useBranchQueryParam, useSession } from "@/lib/session/SessionProvider";
 import { formatCurrency } from "@/lib/utils";
-import type { Bank } from "@/lib/types";
+import type { Bank, Branch, Currency } from "@/lib/types";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 const emptyForm = {
-  name: "",
+  accountName: "",
+  bankName: "",
   accountNumber: "",
   balance: "",
-  currency: "USD",
+  currencyId: "",
+  branchId: "",
 };
 
 export default function BanksPage() {
   const { t, locale } = useTranslation();
+  const { branchFilter, isSuperAdmin } = useSession();
+  const branchQuery = useBranchQueryParam();
   const [banks, setBanks] = useState<Bank[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
 
-  const fetchBanks = useCallback(async () => {
-    const res = await fetch("/api/banks");
-    const data = await res.json();
-    setBanks(data);
+  const fetchData = useCallback(async () => {
+    const [banksRes, branchesRes, currenciesRes] = await Promise.all([
+      fetch(`/api/bank-accounts${branchQuery}`),
+      fetch("/api/branches"),
+      fetch("/api/currencies"),
+    ]);
+    setBanks(await banksRes.json());
+    const allBranches = await branchesRes.json();
+    setBranches(
+      branchFilter
+        ? allBranches.filter((b: Branch) => b.id === branchFilter)
+        : allBranches
+    );
+    setCurrencies(await currenciesRes.json());
     setLoading(false);
-  }, []);
+  }, [branchQuery, branchFilter]);
 
   useEffect(() => {
-    fetchBanks();
-  }, [fetchBanks]);
+    fetchData();
+  }, [fetchData]);
+
+  const branchMap = Object.fromEntries(branches.map((b) => [b.id, b.name]));
 
   const openCreate = () => {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, branchId: branchFilter ?? "" });
     setModalOpen(true);
   };
 
   const openEdit = (bank: Bank) => {
     setEditingId(bank.id);
     setForm({
-      name: bank.name,
+      accountName: bank.accountName,
+      bankName: bank.bankName,
       accountNumber: bank.accountNumber,
       balance: String(bank.balance),
-      currency: bank.currency,
+      currencyId: bank.currencyId,
+      branchId: bank.branchId,
     });
     setModalOpen(true);
   };
@@ -62,20 +83,22 @@ export default function BanksPage() {
   const handleSave = async () => {
     setSaving(true);
     const payload = {
-      name: form.name,
+      accountName: form.accountName,
+      bankName: form.bankName,
       accountNumber: form.accountNumber,
       balance: parseFloat(form.balance) || 0,
-      currency: form.currency,
+      currencyId: form.currencyId,
+      branchId: form.branchId,
     };
 
     if (editingId) {
-      await fetch(`/api/banks/${editingId}`, {
+      await fetch(`/api/bank-accounts/${editingId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
     } else {
-      await fetch("/api/banks", {
+      await fetch("/api/bank-accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -84,17 +107,18 @@ export default function BanksPage() {
 
     setSaving(false);
     setModalOpen(false);
-    fetchBanks();
+    fetchData();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm(t("confirmDelete"))) return;
-    await fetch(`/api/banks/${id}`, { method: "DELETE" });
-    fetchBanks();
+    await fetch(`/api/bank-accounts/${id}`, { method: "DELETE" });
+    fetchData();
   };
 
   const columns: Column<Bank>[] = [
-    { key: "name", header: t("bankName") },
+    { key: "bankName", header: t("bankName") },
+    { key: "accountName", header: t("accountName") },
     { key: "accountNumber", header: t("accountNumber") },
     {
       key: "balance",
@@ -102,6 +126,11 @@ export default function BanksPage() {
       render: (bank) => formatCurrency(bank.balance, locale, bank.currency),
     },
     { key: "currency", header: t("currency") },
+    {
+      key: "branchId",
+      header: t("branch"),
+      render: (bank) => branchMap[bank.branchId] ?? bank.branchId,
+    },
   ];
 
   if (loading) {
@@ -116,7 +145,11 @@ export default function BanksPage() {
     <div>
       <PageHeader
         title={t("banks")}
-        description={t("manageBanks")}
+        description={
+          branchFilter && !isSuperAdmin
+            ? `${t("manageBanks")} — ${t("branchScopedView")}`
+            : t("manageBanks")
+        }
         actions={
           <Button variant="gradient" onClick={openCreate}>
             <Plus className="w-4 h-4" />
@@ -129,7 +162,7 @@ export default function BanksPage() {
         <DataTable
           data={banks}
           columns={columns}
-          searchKeys={["name", "accountNumber", "currency"]}
+          searchKeys={["bankName", "accountName", "accountNumber", "currency"]}
           keyExtractor={(b) => b.id}
           actions={(bank) => (
             <>
@@ -166,8 +199,17 @@ export default function BanksPage() {
           <FormField label={t("bankName")}>
             <input
               className={inputClassName}
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              value={form.bankName}
+              onChange={(e) => setForm({ ...form, bankName: e.target.value })}
+            />
+          </FormField>
+          <FormField label={t("accountName")}>
+            <input
+              className={inputClassName}
+              value={form.accountName}
+              onChange={(e) =>
+                setForm({ ...form, accountName: e.target.value })
+              }
             />
           </FormField>
           <FormField label={t("accountNumber")}>
@@ -178,6 +220,21 @@ export default function BanksPage() {
                 setForm({ ...form, accountNumber: e.target.value })
               }
             />
+          </FormField>
+          <FormField label={t("branch")}>
+            <select
+              className={selectClassName}
+              value={form.branchId}
+              disabled={!!branchFilter}
+              onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+            >
+              <option value="">{t("selectBranch")}</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
           </FormField>
           <FormField label={t("balance")}>
             <input
@@ -190,12 +247,15 @@ export default function BanksPage() {
           <FormField label={t("currency")}>
             <select
               className={selectClassName}
-              value={form.currency}
-              onChange={(e) => setForm({ ...form, currency: e.target.value })}
+              value={form.currencyId}
+              onChange={(e) => setForm({ ...form, currencyId: e.target.value })}
             >
-              <option value="USD">USD</option>
-              <option value="SDG">SDG</option>
-              <option value="EUR">EUR</option>
+              <option value="">{t("selectCurrency")}</option>
+              {currencies.map((currency) => (
+                <option key={currency.id} value={currency.id}>
+                  {currency.code} — {currency.name}
+                </option>
+              ))}
             </select>
           </FormField>
         </div>

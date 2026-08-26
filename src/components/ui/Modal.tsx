@@ -114,6 +114,9 @@ export function ModalActions({
         {cancelLabel}
       </Button>
       <Button variant="gradient" onClick={onSave} disabled={loading}>
+        {loading && (
+          <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+        )}
         {saveLabel}
       </Button>
     </>

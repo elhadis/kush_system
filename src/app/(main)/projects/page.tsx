@@ -10,42 +10,59 @@ import Modal, {
 } from "@/components/ui/Modal";
 import PageHeader, { StatusBadge } from "@/components/ui/PageHeader";
 import { useTranslation } from "@/lib/i18n/LanguageProvider";
+import { useBranchQueryParam, useSession } from "@/lib/session/SessionProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import type { Project } from "@/lib/types";
+import type { Branch, Currency, ProjectWithRelations } from "@/lib/types";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 const emptyForm = {
-  name: "",
+  title: "",
   description: "",
-  status: "planning" as Project["status"],
-  budget: "",
-  spent: "",
+  status: "planning" as ProjectWithRelations["status"],
+  targetBudget: "",
+  collectedAmount: "",
+  branchId: "",
+  currencyId: "",
   startDate: new Date().toISOString().split("T")[0],
   endDate: "",
 };
 
 export default function ProjectsPage() {
   const { t, locale } = useTranslation();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const { branchFilter, isSuperAdmin } = useSession();
+  const branchQuery = useBranchQueryParam();
+  const [projects, setProjects] = useState<ProjectWithRelations[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
 
-  const fetchProjects = useCallback(async () => {
-    const res = await fetch("/api/projects");
-    const data = await res.json();
-    setProjects(data);
+  const fetchData = useCallback(async () => {
+    const [projectsRes, branchesRes, currenciesRes] = await Promise.all([
+      fetch(`/api/projects${branchQuery}`),
+      fetch("/api/branches"),
+      fetch("/api/currencies"),
+    ]);
+    setProjects(await projectsRes.json());
+    const allBranches = await branchesRes.json();
+    setBranches(
+      branchFilter
+        ? allBranches.filter((b: Branch) => b.id === branchFilter)
+        : allBranches
+    );
+    setCurrencies(await currenciesRes.json());
     setLoading(false);
-  }, []);
+  }, [branchQuery, branchFilter]);
 
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    fetchData();
+  }, [fetchData]);
 
-  const statusLabel = (status: Project["status"]) => {
+  const statusLabel = (status: ProjectWithRelations["status"]) => {
     const map = {
       active: t("active"),
       planning: t("planning"),
@@ -56,7 +73,7 @@ export default function ProjectsPage() {
   };
 
   const statusType = (
-    status: Project["status"]
+    status: ProjectWithRelations["status"]
   ): "success" | "warning" | "info" | "neutral" => {
     if (status === "active") return "success";
     if (status === "planning") return "warning";
@@ -66,18 +83,20 @@ export default function ProjectsPage() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, branchId: branchFilter ?? "" });
     setModalOpen(true);
   };
 
-  const openEdit = (project: Project) => {
+  const openEdit = (project: ProjectWithRelations) => {
     setEditingId(project.id);
     setForm({
-      name: project.name,
+      title: project.title,
       description: project.description,
       status: project.status,
-      budget: String(project.budget),
-      spent: String(project.spent),
+      targetBudget: String(project.targetBudget),
+      collectedAmount: String(project.collectedAmount),
+      branchId: project.branchId,
+      currencyId: project.currencyId,
       startDate: project.startDate,
       endDate: project.endDate ?? "",
     });
@@ -87,11 +106,13 @@ export default function ProjectsPage() {
   const handleSave = async () => {
     setSaving(true);
     const payload = {
-      name: form.name,
+      title: form.title,
       description: form.description,
       status: form.status,
-      budget: parseFloat(form.budget) || 0,
-      spent: parseFloat(form.spent) || 0,
+      targetBudget: parseFloat(form.targetBudget) || 0,
+      collectedAmount: parseFloat(form.collectedAmount) || 0,
+      branchId: form.branchId,
+      currencyId: form.currencyId,
       startDate: form.startDate,
       endDate: form.endDate || undefined,
       donorIds: editingId
@@ -115,17 +136,22 @@ export default function ProjectsPage() {
 
     setSaving(false);
     setModalOpen(false);
-    fetchProjects();
+    fetchData();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm(t("confirmDelete"))) return;
     await fetch(`/api/projects/${id}`, { method: "DELETE" });
-    fetchProjects();
+    fetchData();
   };
 
-  const columns: Column<Project>[] = [
-    { key: "name", header: t("projectName") },
+  const columns: Column<ProjectWithRelations>[] = [
+    { key: "title", header: t("projectName") },
+    {
+      key: "branchId",
+      header: t("branch"),
+      render: (p) => p.branchName ?? p.branchId,
+    },
     {
       key: "status",
       header: t("status"),
@@ -134,14 +160,16 @@ export default function ProjectsPage() {
       ),
     },
     {
-      key: "budget",
-      header: t("budget"),
-      render: (p) => formatCurrency(p.budget, locale),
+      key: "targetBudget",
+      header: t("targetBudget"),
+      render: (p) =>
+        formatCurrency(p.targetBudget, locale, p.currencyCode ?? "SDG"),
     },
     {
-      key: "spent",
-      header: t("spent"),
-      render: (p) => formatCurrency(p.spent, locale),
+      key: "collectedAmount",
+      header: t("collectedAmount"),
+      render: (p) =>
+        formatCurrency(p.collectedAmount, locale, p.currencyCode ?? "SDG"),
     },
     {
       key: "startDate",
@@ -162,7 +190,11 @@ export default function ProjectsPage() {
     <div>
       <PageHeader
         title={t("projects")}
-        description={t("manageProjects")}
+        description={
+          branchFilter && !isSuperAdmin
+            ? `${t("manageProjects")} — ${t("branchScopedView")}`
+            : t("manageProjects")
+        }
         actions={
           <Button variant="gradient" onClick={openCreate}>
             <Plus className="w-4 h-4" />
@@ -175,7 +207,7 @@ export default function ProjectsPage() {
         <DataTable
           data={projects}
           columns={columns}
-          searchKeys={["name", "description", "status"]}
+          searchKeys={["title", "description", "status", "branchName"]}
           keyExtractor={(p) => p.id}
           actions={(project) => (
             <>
@@ -212,8 +244,8 @@ export default function ProjectsPage() {
           <FormField label={t("projectName")}>
             <input
               className={inputClassName}
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
             />
           </FormField>
           <FormField label={t("description")}>
@@ -225,6 +257,35 @@ export default function ProjectsPage() {
               }
             />
           </FormField>
+          <FormField label={t("branch")}>
+            <select
+              className={selectClassName}
+              value={form.branchId}
+              disabled={!!branchFilter}
+              onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+            >
+              <option value="">{t("selectBranch")}</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label={t("currency")}>
+            <select
+              className={selectClassName}
+              value={form.currencyId}
+              onChange={(e) => setForm({ ...form, currencyId: e.target.value })}
+            >
+              <option value="">{t("selectCurrency")}</option>
+              {currencies.map((currency) => (
+                <option key={currency.id} value={currency.id}>
+                  {currency.code} — {currency.name}
+                </option>
+              ))}
+            </select>
+          </FormField>
           <FormField label={t("status")}>
             <select
               className={selectClassName}
@@ -232,7 +293,7 @@ export default function ProjectsPage() {
               onChange={(e) =>
                 setForm({
                   ...form,
-                  status: e.target.value as Project["status"],
+                  status: e.target.value as ProjectWithRelations["status"],
                 })
               }
             >
@@ -243,20 +304,24 @@ export default function ProjectsPage() {
             </select>
           </FormField>
           <div className="grid grid-cols-2 gap-4">
-            <FormField label={t("budget")}>
+            <FormField label={t("targetBudget")}>
               <input
                 type="number"
                 className={inputClassName}
-                value={form.budget}
-                onChange={(e) => setForm({ ...form, budget: e.target.value })}
+                value={form.targetBudget}
+                onChange={(e) =>
+                  setForm({ ...form, targetBudget: e.target.value })
+                }
               />
             </FormField>
-            <FormField label={t("spent")}>
+            <FormField label={t("collectedAmount")}>
               <input
                 type="number"
                 className={inputClassName}
-                value={form.spent}
-                onChange={(e) => setForm({ ...form, spent: e.target.value })}
+                value={form.collectedAmount}
+                onChange={(e) =>
+                  setForm({ ...form, collectedAmount: e.target.value })
+                }
               />
             </FormField>
           </div>

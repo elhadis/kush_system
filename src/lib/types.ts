@@ -1,13 +1,24 @@
 export type Language = "en" | "ar";
 export type Direction = "ltr" | "rtl";
 
+export interface Currency {
+  id: string;
+  code: string;
+  name: string;
+  exchangeRate: number;
+  updatedAt: string;
+}
+
 export interface Bank {
   id: string;
   name: string;
+  accountName: string;
+  bankName: string;
   accountNumber: string;
   balance: number;
   currency: string;
-  branchId?: string;
+  currencyId: string;
+  branchId: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -15,11 +26,34 @@ export interface Bank {
 export interface Branch {
   id: string;
   name: string;
+  location: string;
   city: string;
   address: string;
   phone: string;
   isActive: boolean;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface BranchWithRelations extends Branch {
+  users: User[];
+  bankAccounts: Bank[];
+  projects: Project[];
+  activities: Activity[];
+}
+
+export interface ActivityWithRelations extends Activity {
+  branchName?: string;
+  bankAccountName?: string;
+  bankName?: string;
+  currencyCode?: string;
+  currencyName?: string;
+}
+
+export interface ProjectWithRelations extends Project {
+  branchName?: string;
+  currencyCode?: string;
+  currencyName?: string;
 }
 
 export interface Role {
@@ -37,7 +71,11 @@ export interface User {
   branchId?: string;
   isActive: boolean;
   avatar?: string;
+  /** Hashed password — never returned by public API responses. */
+  passwordHash?: string;
+  mustChangePasswordOnFirstLogin?: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface Donor {
@@ -55,12 +93,16 @@ export interface Donor {
 export interface Project {
   id: string;
   name: string;
+  title: string;
   description: string;
   status: "planning" | "active" | "completed" | "on-hold";
   budget: number;
+  targetBudget: number;
   spent: number;
+  collectedAmount: number;
   donorIds: string[];
-  branchId?: string;
+  branchId: string;
+  currencyId: string;
   startDate: string;
   endDate?: string;
   createdAt: string;
@@ -70,11 +112,16 @@ export interface Project {
 export interface Activity {
   id: string;
   title: string;
-  description: string;
-  projectId: string;
-  status: "scheduled" | "in-progress" | "completed";
-  date: string;
+  description?: string;
+  status: "planning" | "active" | "completed" | "scheduled" | "in-progress";
+  cost: number;
+  branchId: string;
+  bankAccountId: string;
+  currencyId: string;
+  projectId?: string;
+  date?: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface Vendor {

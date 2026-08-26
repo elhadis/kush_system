@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/mock-db/store";
 import type { Bank } from "@/lib/types";
 
-export async function GET() {
-  return NextResponse.json(db.banks.getAll());
+export async function GET(request: NextRequest) {
+  const branchId = request.nextUrl.searchParams.get("branchId");
+  let banks = db.banks.getAll();
+  if (branchId) {
+    banks = banks.filter((b) => b.branchId === branchId);
+  }
+  return NextResponse.json(banks);
 }
 
 export async function POST(request: NextRequest) {
@@ -35,6 +40,7 @@ export async function POST(request: NextRequest) {
       currencyId: body.currencyId,
       branchId: body.branchId,
     });
+
     return NextResponse.json(bank, { status: 201 });
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });

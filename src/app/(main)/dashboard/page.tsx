@@ -3,8 +3,9 @@
 import { Card, StatCard } from "@/components/ui/Card";
 import PageHeader, { StatusBadge } from "@/components/ui/PageHeader";
 import { useTranslation } from "@/lib/i18n/LanguageProvider";
+import { useBranchQueryParam, useSession } from "@/lib/session/SessionProvider";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import type { Activity, Bank, Project } from "@/lib/types";
+import type { ActivityWithRelations, Bank, ProjectWithRelations } from "@/lib/types";
 import {
   Activity as ActivityIcon,
   ArrowUpRight,
@@ -23,25 +24,31 @@ interface DashboardStats {
   bankBalances: number;
   totalProjects: number;
   totalDonors: number;
-  recentActivities: Activity[];
-  projects: Project[];
+  recentActivities: ActivityWithRelations[];
+  projects: ProjectWithRelations[];
   banks: Bank[];
+  branches: { id: string; name: string }[];
+  baseCurrencyCode: string;
+  projectBudgetTotal: number;
+  activityCostTotal: number;
 }
 
 export default function DashboardPage() {
   const { t, locale } = useTranslation();
+  const { currentUser, branchFilter, isSuperAdmin } = useSession();
+  const branchQuery = useBranchQueryParam();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/dashboard")
+    fetch(`/api/dashboard${branchQuery}`)
       .then((res) => res.json())
       .then((data: DashboardStats) => {
         setStats(data);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [branchQuery]);
 
   if (loading) {
     return (
@@ -61,7 +68,15 @@ export default function DashboardPage() {
     recentActivities: [],
     projects: [],
     banks: [],
+    branches: [],
+    baseCurrencyCode: "SDG",
+    projectBudgetTotal: 0,
+    activityCostTotal: 0,
   };
+
+  const branchMap = Object.fromEntries(
+    (data.branches ?? []).map((b) => [b.id, b.name])
+  );
 
   const statusLabel = (status: string) => {
     const map: Record<string, string> = {
@@ -86,7 +101,7 @@ export default function DashboardPage() {
     <div>
       <PageHeader
         title={t("dashboard")}
-        description={`${t("welcomeBack")}, Ahmed Hassan — ${t("overview")}`}
+        description={`${t("welcomeBack")}, ${currentUser?.name ?? ""} — ${t("overview")}${!isSuperAdmin && branchFilter ? ` (${t("branchScopedView")})` : ""}`}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6 mb-8">
@@ -113,9 +128,13 @@ export default function DashboardPage() {
         />
         <StatCard
           title={t("bankBalances")}
-          value={formatCurrency(data.bankBalances, locale)}
+          value={formatCurrency(
+            data.bankBalances,
+            locale,
+            data.baseCurrencyCode
+          )}
           icon={<Wallet className="w-6 h-6 text-white" />}
-          trend={`${data.banks.length} accounts`}
+          trend={`${data.banks.length} ${t("accounts")} · ${t("convertedToBase")}`}
           trendUp
         />
       </div>
@@ -132,14 +151,17 @@ export default function DashboardPage() {
           <div className="space-y-4">
             {data.projects.slice(0, 4).map((project) => {
               const progress =
-                project.budget > 0
-                  ? Math.min(100, (project.spent / project.budget) * 100)
+                project.targetBudget > 0
+                  ? Math.min(
+                      100,
+                      (project.collectedAmount / project.targetBudget) * 100
+                    )
                   : 0;
               return (
                 <div key={project.id} className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-foreground truncate">
-                      {project.name}
+                      {project.title}
                     </span>
                     <StatusBadge
                       status={statusType(project.status)}
@@ -154,8 +176,17 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex justify-between text-xs text-muted">
                     <span>
-                      {formatCurrency(project.spent, locale)} /{" "}
-                      {formatCurrency(project.budget, locale)}
+                      {formatCurrency(
+                        project.collectedAmount,
+                        locale,
+                        project.currencyCode ?? "SDG"
+                      )}{" "}
+                      /{" "}
+                      {formatCurrency(
+                        project.targetBudget,
+                        locale,
+                        project.currencyCode ?? "SDG"
+                      )}
                     </span>
                     <span>{Math.round(progress)}%</span>
                   </div>
@@ -174,22 +205,47 @@ export default function DashboardPage() {
             <ActivityIcon className="w-5 h-5 text-primary" />
           </div>
           <div className="space-y-4">
-            {data.recentActivities.map((activity) => (
-              <div
-                key={activity.id}
-                className="flex gap-3 p-3 rounded-xl bg-background/50 hover:bg-surface-hover transition-colors"
-              >
-                <div className="w-2 h-2 mt-2 rounded-full gradient-brand shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {activity.title}
-                  </p>
-                  <p className="text-xs text-muted mt-0.5">
-                    {formatDate(activity.date, locale)}
-                  </p>
+            {data.recentActivities.length === 0 ? (
+              <p className="text-sm text-muted text-center py-6">
+                {t("noResults")}
+              </p>
+            ) : (
+              data.recentActivities.map((activity) => (
+                <div
+                  key={activity.id}
+                  className="flex gap-3 p-3 rounded-xl bg-background/50 hover:bg-surface-hover transition-colors"
+                >
+                  <div className="w-2 h-2 mt-2 rounded-full gradient-brand shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {activity.title}
+                      </p>
+                      <StatusBadge
+                        status={statusType(activity.status)}
+                        label={statusLabel(activity.status)}
+                      />
+                    </div>
+                    <p className="text-xs text-muted mt-0.5">
+                      {activity.branchName} · {activity.bankName} ·{" "}
+                      {activity.currencyCode}
+                    </p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-muted">
+                        {formatDate(activity.createdAt, locale)}
+                      </p>
+                      <p className="text-xs font-semibold text-primary">
+                        {formatCurrency(
+                          activity.cost,
+                          locale,
+                          activity.currencyCode ?? "SDG"
+                        )}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </Card>
       </div>
@@ -211,9 +267,14 @@ export default function DashboardPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm font-medium text-foreground">
-                    {bank.name}
+                    {bank.bankName ?? bank.name}
                   </p>
-                  <p className="text-xs text-muted mt-0.5">{bank.accountNumber}</p>
+                  <p className="text-xs text-muted mt-0.5">
+                    {bank.accountName} · {bank.accountNumber}
+                    {bank.branchId && branchMap[bank.branchId]
+                      ? ` · ${branchMap[bank.branchId]}`
+                      : ""}
+                  </p>
                 </div>
                 <ArrowUpRight className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
               </div>
