@@ -56,8 +56,6 @@ export default function FinancialFormsPage() {
     return grouped;
   }, [banks]);
 
-  const branchMap = Object.fromEntries(branches.map((b) => [b.id, b.name]));
-
   return (
     <div>
       <PageHeader

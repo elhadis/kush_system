@@ -121,6 +121,13 @@ async function getSmtpTransporter(): Promise<{
     return { transporter, mode: "smtp" };
   }
 
+  // Never use Ethereal in production — require real SMTP/Resend on Vercel
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL === "1") {
+    throw new Error(
+      "Email is not configured. Set RESEND_API_KEY or SMTP_HOST, SMTP_USER, and SMTP_PASS in environment variables."
+    );
+  }
+
   // Dev fallback: Ethereal captures mail and provides a preview URL
   if (!globalMail.__nasEtherealAccount) {
     console.info("[welcome-email] No SMTP/Resend configured — creating Ethereal test account…");

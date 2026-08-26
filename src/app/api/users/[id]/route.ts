@@ -19,7 +19,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   try {
     const body = await request.json();
-    const { password: _password, passwordHash: _hash, ...safeBody } = body;
+    const safeBody = { ...body };
+    delete safeBody.password;
+    delete safeBody.passwordHash;
     const updated = db.users.update(id, {
       ...safeBody,
       branchId: body.branchId || undefined,

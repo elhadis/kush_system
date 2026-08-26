@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { resolveAppUrl } from "@/lib/app-url";
 import { hashPassword, sanitizeUser } from "@/lib/auth/password";
 import { sendWelcomeEmail } from "@/lib/email/welcome";
 import { db } from "@/lib/mock-db/store";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   return NextResponse.json(db.users.getAll().map(sanitizeUser));
@@ -55,11 +59,7 @@ export async function POST(request: NextRequest) {
       mustChangePasswordOnFirstLogin: true,
     });
 
-    const origin =
-      request.headers.get("origin") ??
-      process.env.NEXT_PUBLIC_APP_URL ??
-      "http://localhost:3000";
-    const loginUrl = `${origin.replace(/\/$/, "")}/login`;
+    const loginUrl = `${resolveAppUrl(request)}/login`;
 
     console.info("[api/users] Awaiting welcome email for:", user.email);
 

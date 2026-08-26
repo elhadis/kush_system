@@ -455,6 +455,7 @@ interface Database {
 
 const globalStore = globalThis as typeof globalThis & {
   __kushDb?: Database;
+  __kushDbWarned?: boolean;
 };
 
 function migrateStore(store: Database): Database {
@@ -523,6 +524,16 @@ function migrateStore(store: Database): Database {
 }
 
 function getStore(): Database {
+  if (
+    !globalStore.__kushDbWarned &&
+    (process.env.VERCEL === "1" || process.env.NODE_ENV === "production")
+  ) {
+    console.warn(
+      "[kush-db] Using in-memory mock store. Data does not persist across serverless cold starts on Vercel."
+    );
+    globalStore.__kushDbWarned = true;
+  }
+
   if (!globalStore.__kushDb) {
     globalStore.__kushDb = migrateStore({
       currencies: [...seedCurrencies],

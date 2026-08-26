@@ -32,7 +32,8 @@ export function verifyPassword(password: string, passwordHash?: string): boolean
 export function sanitizeUser<T extends { passwordHash?: string }>(
   user: T
 ): Omit<T, "passwordHash"> {
-  const { passwordHash: _passwordHash, ...safe } = user;
+  const safe = { ...user };
+  delete safe.passwordHash;
   return safe;
 }
 
